@@ -11,7 +11,6 @@ import collections
 
 rel_abstracts_with_mats_path = "rel_abstracts_with_mats.txt"
 
-plain_tokenized = "rel_abstracts.txt"
 materials_list_path = "materials_list.txt"
 
 rel_abstracts_file = "rel_abstracts.bpe"

@@ -7,7 +7,7 @@ from tensorflow.keras import layers
 from keras_utils import example_generator_not_material, example_generator_material
 import pickle
 import tensorflow_probability as tfp
-from keras_utils import example_generator_not_material, example_generator_material
+from keras_utils import example_generator_not_material, example_generator_material, elements
 import os
 import numpy as np
 
@@ -23,8 +23,11 @@ index2material = pickle.load(open(
 vocab_size = len(word2index.keys())
 
 d_model = 200
+hidden_dim = 20
 window_size = 5
 neg_samples = 10
+dropout = 0.1
+n_elements = len(elements)
 
 input_context = tf.keras.Input(shape=(1,), name="inputs_context")
 
@@ -51,7 +54,8 @@ negative_target_embeddings = embeddings_target(negative_samples)
 positive_probability = tf.keras.layers.Dot(axes=(2, 2))(
     [sample_context_embedding, sample_target_embedding])
 
-#There is surely a nicer way to do this. All I want to do is take the dot product and contract over indices.
+# There is surely a nicer way to do this. All I want to do is take the dot product and contract over indices.
+
 
 def negative_sammples_contract(x):
   return tf.einsum('ijk,lk->ijl', x[0], x[1])
@@ -87,13 +91,60 @@ loss = tf.keras.layers.Lambda(lambda x: tf.keras.backend.squeeze(tf.keras.backen
     keepdims=False
 ), axis=1))(loss)
 
+
 model = tf.keras.Model(
     inputs=[input_target, input_context], outputs=loss)
 
+input_material = tf.keras.layers.Input(
+    shape=(n_elements,), name="inputs_material")
+
+attention = tf.keras.layers.Attention()([input_material, input_material])
+attention = tf.keras.layers.Attention()([attention, attention])
+attention = tf.keras.layers.Dropout(rate=dropout)(attention)
+
+attention = tf.keras.layers.LayerNormalization(
+    epsilon=1e-6)(attention)
+
+hidden_rep = tf.keras.layers.Dense(
+    units=hidden_dim, activation='tanh')(attention)
+
+sample_material_embedding = tf.keras.layers.Dense(
+    units=d_model, activation='tanh')(attention)
+
+positive_probability_material = tf.keras.layers.Dot(axes=(2, 1))(
+    [sample_context_embedding, sample_material_embedding])
+
+positive_loss_material_tensor = tf.keras.layers.Lambda(
+    positive_loss)(positive_probability_material)
+
+positive_loss_material_tensor = tf.keras.layers.Lambda(
+    lambda x: tf.expand_dims(x, axis=1))(positive_loss_material_tensor)
+
+loss_material = tf.keras.layers.Concatenate()(
+    [positive_loss_material_tensor, negative_loss_tensor])
+
+loss_material = tf.keras.layers.Lambda(lambda x: tf.keras.backend.squeeze(tf.keras.backend.sum(
+    x,
+    axis=2,
+    keepdims=False
+), axis=1))(loss_material)
+
+
 corpus = []
+
+
+def is_material(word, material2index):
+  try:
+    material2index[word]
+    return True
+  except KeyError:
+    return False
+
+
 with open('rel_abstracts.bpe', 'r') as f:
   for l in f:
-    corpus.append(l.strip().split())
+    abstract = l.strip().split()
+    corpus.append(abstract)
 
 dataset = tf.data.Dataset.from_generator(
     lambda: example_generator_not_material(corpus, window_size, word2index), ((tf.int64, tf.int64), tf.int64), output_shapes=((tf.TensorShape([]), tf.TensorShape([])), tf.TensorShape([]))).prefetch(tf.data.experimental.AUTOTUNE).batch(
@@ -104,4 +155,20 @@ model.compile(optimizer='adam',
 
 model.summary()
 
-model.fit(dataset, steps_per_epoch=10000, epochs=100)
+
+model_material = tf.keras.Model(
+    inputs=[input_material, input_context], outputs=loss_material)
+
+dataset_material = tf.data.Dataset.from_generator(
+    lambda: example_generator_material(corpus, window_size, word2index, material2index), ((tf.int64, tf.int64), tf.int64), output_shapes=((tf.TensorShape([n_elements]), tf.TensorShape([])), tf.TensorShape([]))).prefetch(tf.data.experimental.AUTOTUNE).batch(
+        512)
+
+model_material.compile(optimizer='adam',
+                       loss='mse')
+
+model_material.summary()
+
+while True:
+  model_material.fit(dataset_material, steps_per_epoch=1000, epochs=1)
+
+  model.fit(dataset, steps_per_epoch=1000, epochs=1)
