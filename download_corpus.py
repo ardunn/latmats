@@ -48,7 +48,6 @@ def tokenize(content, token_min_len=2, token_max_len=80, lower=False):
 
 
 pipeline = []
-# pipeline.append({"$limit": 1000})
 pipeline.append({"$lookup": {
     "from": "entries_review",
     "localField": "doi",
