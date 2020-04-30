@@ -2,12 +2,9 @@
 # coding: utf-8
 from __future__ import absolute_import, division, print_function, unicode_literals
 import tensorflow as tf
-from tensorflow import keras
-from tensorflow.keras import layers
-from keras_utils import example_generator_not_material, example_generator_material
 import pickle
 import tensorflow_probability as tfp
-from keras_utils import example_generator_not_material, example_generator_material, elements, parse_formula, WeightedSoftAttentionMessage, WeightedSoftAttention
+from latmats.keras_utils import example_generator_not_material, example_generator_material, elements
 import os
 import numpy as np
 from collections import Counter

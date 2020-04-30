@@ -128,9 +128,9 @@ def write_train_tfrecord():
     validation_fraction = 0.0001
 
     word2index = pickle.load(
-        open(os.path.join("data", 'word2index.pkl'), 'rb'))
+        open(os.path.join("../data", 'word2index.pkl'), 'rb'))
     index2word = pickle.load(
-        open(os.path.join("data", 'index2word.pkl'), 'rb'))
+        open(os.path.join("../data", 'index2word.pkl'), 'rb'))
 
     vocab_size = len(word2index.items())
 

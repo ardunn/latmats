@@ -10,7 +10,7 @@ import json
 import numpy as np
 from pymatgen import Composition
 from sklearn.model_selection import KFold
-from keras_utils import parse_formula, elements
+from latmats.keras_utils import parse_formula, elements
 from sklearn.utils import shuffle
 import tensorflow_addons as tfa
 from sklearn.preprocessing import StandardScaler
