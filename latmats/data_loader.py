@@ -4,6 +4,7 @@ import pickle
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../data")
 
+
 def open_pickle(filename):
     """
     Load a pickle file from a filename.
@@ -19,12 +20,14 @@ def open_pickle(filename):
     return loaded
 
 
-def load_file(relative_filename: str):
+def load_file(relative_filename: str, as_lines=False):
     """
     Load a file by relative filename (e.g., material2index).
 
     Args:
         relative_filename (str): The relative filename
+        as_lines (bool): Get a text file as lines, not as one big string. Only
+            valid for .txt files.
 
     Returns:
         The object from the file
@@ -35,7 +38,10 @@ def load_file(relative_filename: str):
     print(f"loading {filename}...")
     if filename.endswith(".txt"):
         with open(filename) as f:
-            loaded = f.read()
+            if as_lines:
+                loaded = f.readlines()
+            else:
+                loaded = f.read()
     elif filename.endswith(".pkl"):
         loaded = open_pickle(filename)
     print(f"loaded {filename}")
