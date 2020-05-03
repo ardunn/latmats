@@ -3,22 +3,24 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 import tensorflow as tf
 import pickle
-import tensorflow_probability as tfp
-from latmats.keras_utils import example_generator_not_material, example_generator_material, elements
+# import tensorflow_probability as tfp
+# from latmats.originals.keras_utils import example_generator_not_material, example_generator_material, elements
 import os
 import numpy as np
 from collections import Counter
 import random
 import json
 
-word2index = pickle.load(open(
-    os.path.join('word2index_3mil.pkl'), 'rb'))
-index2word = pickle.load(open(
-    os.path.join('index2word_3mil.pkl'), 'rb'))
-material2index = pickle.load(open(
-    os.path.join('material2index.pkl'), 'rb'))
-index2material = pickle.load(open(
-    os.path.join('index2material.pkl'), 'rb'))
+
+from latmats.data_loader import load_file
+
+
+word2index = load_file('word2index_3mil.pkl')
+index2word = load_file('index2word_3mil.pkl')
+material2index = load_file('material2index.pkl')
+index2material = load_file('index2material.pkl')
+
+raise ValueError
 
 vocab_size = len(word2index.keys())
 

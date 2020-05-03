@@ -4,13 +4,10 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import math
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers
-from tensorflow.keras.layers import Layer
 import json
 import numpy as np
-from pymatgen import Composition
 from sklearn.model_selection import KFold
-from latmats.keras_utils import parse_formula, elements
+from latmats.originals.keras_utils import parse_formula, elements
 from sklearn.utils import shuffle
 import tensorflow_addons as tfa
 from sklearn.preprocessing import StandardScaler
