@@ -17,6 +17,15 @@ def load_zT(all_data=False):
     - Measured at 300K (within 0.01 K)
     - polycrystalline
 
+
+    If all_data is loaded, the columns are:
+    - composition: composition as a string
+    - zT: thermoelectric figure of merit
+    - PF (W/m.K2): power factor
+    - k (W/m.K): overall thermal conductivity
+    - S (uV/K): Seebeck coefficient
+    - log rho: Log resistivity, presumably in ohm-meters.
+
     Args:
         all_data (bool): Whether all data will be returned in the df. If False,
             only the compositions as strings and the zT measurements will be
@@ -72,6 +81,24 @@ def load_bandgaps():
     return df
 
 
+def load_steels():
+    """
+    312 yeild strengths of various steels.
+
+    Matbench v0.1 dataset for predicting steel yield strengths from chemical
+    composition alone. Retrieved from Citrine informatics. Deduplicated.
+
+    Experimentally measured steel yield strengths, in GPa.
+    https://citrination.com/datasets/153092/
+
+    Returns:
+        (pd.DataFrame): Dataframe of yield strengths per composition.
+    """
+    df = pd.read_csv("yieldstrength-citrination-312.csv", index_col=False)
+    return df
+
+
+
 if __name__ == "__main__":
-    df = load_e_form()
+    df = load_steels()
     print(df)
