@@ -37,11 +37,6 @@ dropout = 0.1
 n_elements = len(elements) + 1
 
 
-def penalized_tanh(x):
-    alpha = 0.25
-    return tf.maximum(tf.nn.tanh(x), alpha * tf.nn.tanh(x))
-
-
 def negative_samples_contract(x):
     return tf.einsum('ijk,lk->ijl', x[0], x[1])
 
@@ -110,35 +105,14 @@ def attention_layer(d_model, n_heads, name="encoder_layer"):
     key = split_heads(key, batch_size)
     value = split_heads(value, batch_size)
 
-    scaled_attention = scaled_dot_product_attention(
-      query, key, value, input_mask)
-
+    scaled_attention = scaled_dot_product_attention(query, key, value, input_mask)
     scaled_attention = tf.transpose(scaled_attention, perm=[0, 2, 1, 3])
 
     # concatenation of heads
-    concat_attention = tf.reshape(scaled_attention,
-                                (batch_size, -1, d_model))
+    concat_attention = tf.reshape(scaled_attention, (batch_size, -1, d_model))
 
     attention = tf.keras.layers.Dense(units=d_model)(concat_attention)
-
-    attention = tf.keras.layers.LayerNormalization(
-      epsilon=1e-6)(inputs_norm + attention)
-
-    # attention = tf.keras.layers.Dense(
-    #     units=d_model)(attention)
-
-    # attention = tf.keras.layers.PReLU()(attention)
-
-    # attention = tf.keras.layers.LayerNormalization(
-    #     epsilon=1e-6)(attention)
-
-    # attention = tf.keras.layers.LayerNormalization(
-    #     epsilon=1e-6)(inputs_norm + attention)
-
-    # attention = tf.keras.layers.Dense(units=d_model)(attention)
-    # attention = tf.keras.layers.LayerNormalization(
-    #     epsilon=1e-6)(attention)
-
+    attention = tf.keras.layers.LayerNormalization(epsilon=1e-6)(inputs_norm + attention)
     outputs = tf.keras.layers.PReLU()(attention)
 
     return tf.keras.Model(inputs=[inputs, input_mask], outputs=outputs, name=name)
@@ -201,8 +175,6 @@ positive_loss_material_tensor = tf.keras.layers.Lambda(positive_loss)(positive_p
 
 loss_material = tf.keras.layers.Concatenate()([positive_loss_material_tensor, negative_loss_tensor])
 loss_material = tf.keras.layers.Lambda(lambda x: tf.keras.backend.squeeze(tf.keras.backend.sum(x, axis=2, keepdims=False), axis=1))(loss_material)
-
-
 
 
 include_terms = set(material2index.keys())
