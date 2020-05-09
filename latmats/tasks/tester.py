@@ -1,28 +1,12 @@
 import numpy as np
 import tqdm
+import copy
+import pickle
 
-from sklearn.dummy import DummyRegressor
-from sklearn.model_selection import cross_val_predict, train_test_split, KFold, \
-    LeaveOneOut
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, explained_variance_score
+from sklearn.model_selection import train_test_split, KFold, LeaveOneOut
+from sklearn.metrics import mean_absolute_error, r2_score, explained_variance_score, mean_squared_error
 
-from latmats.tasks.loader import load_e_form, load_bandgaps, load_steels, \
-    load_zT
-
-
-def rmse(y_true, y_pred):
-    """
-    Root mean squared error.
-
-    Args:
-        y_true:
-        y_pred:
-
-    Returns:
-        RMSE
-
-    """
-    return np.sqrt(mean_squared_error(y_true, y_pred))
+from latmats.tasks.loader import load_e_form, load_bandgaps, load_steels, load_zT
 
 
 class AlgorithmBenchmark:
@@ -36,15 +20,19 @@ class AlgorithmBenchmark:
             if problem == "zT":
                 df = load_zT(all_data=False)
                 cv_scheme = LeaveOneOut()
+                n_splits = cv_scheme.get_n_splits(df["composition"])
             elif problem == "steels":
                 df = load_steels()
                 cv_scheme = LeaveOneOut()
+                n_splits = cv_scheme.get_n_splits(df["composition"])
             elif problem == "bandgap":
                 df = load_bandgaps()
                 cv_scheme = KFold(n_splits=10, shuffle=True, random_state=random_state_cv)
+                n_splits = cv_scheme.n_splits
             elif problem == "e_form":
                 df = load_e_form()
                 cv_scheme = KFold(n_splits=10, shuffle=True, random_state=random_state_cv)
+                n_splits = cv_scheme.n_splits
             df_train, df_test = train_test_split(df, shuffle=True, random_state=random_state_test)
 
             problem_config = {
@@ -57,6 +45,7 @@ class AlgorithmBenchmark:
                     "dfs_folds": None,  # as a list of validation predicted dfs
                     "cv_scores": None,  # as "metric": score pairs
                     "cv_scheme": cv_scheme,
+                    "n_splits": n_splits
                 },
 
                 # Used for generating a final score
@@ -64,7 +53,6 @@ class AlgorithmBenchmark:
                 "testing": {
                     "df_train": df_train,
                     "df_test": df_test,
-                    "final_estimator": None,
                     "df_predicted": None,
                     "scores": None,  # as "metric": score pairs
                 }
@@ -104,7 +92,7 @@ class AlgorithmBenchmark:
         if quiet:
             splits = splitter.split(df)
         else:
-            splits = tqdm.tqdm(splitter.split(df), desc=desc)
+            splits = tqdm.tqdm(splitter.split(df), desc=desc, total=self.data[problem]["cross_validation"]["n_splits"])
 
         for train_ix, test_ix in splits:
             df_train = df.iloc[train_ix]
@@ -143,10 +131,14 @@ class AlgorithmBenchmark:
                 print(f"'{problem}' {metric}: {score}")
         return scores
 
-    def test(self, problem):
+    def test(self, problem, quiet=False):
+        desc = f"testing {self.estimator.__class__.__name__} on problem: '{problem}'"
+        if not quiet:
+            print(f"started: {desc}")
+
         df_train = self.data[problem]["testing"]["df_train"]
         df_test = self.data[problem]["testing"]["df_test"]
-        target = self._get_target_from_df(df)
+        target = self._get_target_from_df(df_train)
         target_predicted = f"predicted {target}"
 
         x_train = df_train.drop(labels=[target], axis=1)
@@ -163,95 +155,53 @@ class AlgorithmBenchmark:
             scores[scorer_name] = score
         self.data[problem]["testing"]["scores"] = scores
 
+        df_test[target_predicted] = y_pred
+        self.data[problem]["testing"]["df_predicted"] = df_test
+
+        if not quiet:
+            print(f"completed: {desc}")
+        return scores
+
+    def test_all_problems(self, return_summary_metrics=("mae",)*4, quiet=False):
+        for problem in self.data.keys():
+            self.test(problem, quiet=quiet)
+        scores = {}
+        for i, problem in enumerate(list(self.data.keys())):
+            metric = return_summary_metrics[i]
+            score = self.data[problem]["testing"]["scores"][metric]
+            scores[problem] = score
+            if not quiet:
+                print(f"'{problem}' {metric}: {score}")
+        return scores
+
+    def export_results(self, filename):
+        results = copy.deepcopy(self.data)
+        with open(filename, "wb") as f:
+            pickle.dump(results, f)\
 
 
-
-from sklearn.ensemble import RandomForestRegressor
-
-from abc import abstractmethod
-from typing import Iterable
-
-from matminer.featurizers.conversions import StrToComposition
-from matminer.featurizers.composition import ElementProperty, ElementFraction
-from matminer.featurizers.base import MultipleFeaturizer
-
-class BaseTesterEstimator:
+def rmse(y_true, y_pred):
     """
-    A base class for creating estimators to run in the tester (regression).
+    Root mean squared error.
 
-    Only requirements is that the derived class implements the fit and predict
-    functions below as described in their docstrings.
+    Args:
+        y_true:
+        y_pred:
+
+    Returns:
+        RMSE
+
     """
-
-    @abstractmethod
-    def fit(self, x: Iterable[str], y) -> None:
-        """
-        Fit the model to the argument data.
-
-        Args:
-            x (Iterable(str)): The compositions, as strings in an iterable.
-            y ([int, float]): The target values for regression
-
-        Returns:
-            None.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def predict(self, x: Iterable[str]) -> Iterable:
-        """
-        Predict property for a set of inputs.
-
-        Args:
-            x (Iterable(str)): The compositions, as strings in an iterable.
-
-        Returns:
-            ([int, str]): The predicted target values, as an iterable of floats/strs.
-        """
-        raise NotImplementedError
-
-
-class DummyEstimator(BaseTesterEstimator):
-
-    def __init__(self):
-        self.regressor = DummyRegressor()
-
-    def fit(self, x, y):
-        self.regressor.fit(x, y)
-
-    def predict(self, x):
-        return self.regressor.predict(x)
-
-
-class RFEstimator(BaseTesterEstimator):
-
-    def __init__(self):
-        self.regressor = RandomForestRegressor(n_estimators=1000)
-        self.stc = StrToComposition()
-        ep = ElementProperty.from_preset("magpie")
-        ef = ElementFraction()
-        self.featurizer = MultipleFeaturizer([ep, ef])
-
-    def _generate_features(self, x):
-        comps = [o[0] for o in self.stc.featurize_many(x)]
-        features = np.asarray(self.featurizer.featurize_many(comps))
-        return features
-
-    def fit(self, x, y):
-        features = self._generate_features(x)
-        self.regressor.fit(features, y)
-
-    def predict(self, x):
-        features = self._generate_features(x)
-        return self.regressor.predict(features)
-
+    return np.sqrt(mean_squared_error(y_true, y_pred))
 
 
 if __name__ == "__main__":
+    from latmats.tasks.baselines import DummyEstimator
+    dummy_benchmark = AlgorithmBenchmark(DummyEstimator())
+    dummy_benchmark.cross_validate_all_problems()
+    dummy_benchmark.test_all_problems()
+    dummy_benchmark.export_results("dummy_results.pkl")
 
-    # dummy_benchmark = AlgorithmBenchmark(DummyEstimator())
+    # dummy_benchmark = AlgorithmBenchmark(RFEstimator())
     # dummy_benchmark.cross_validate_all_problems(quiet=False)
-
-    dummy_benchmark = AlgorithmBenchmark(RFEstimator())
-    dummy_benchmark.cross_validate_all_problems(quiet=False)
 
