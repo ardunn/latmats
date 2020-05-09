@@ -1,12 +1,15 @@
 """
 Loading utilities for computational experiments.
 """
+import os
 import pandas as pd
+
+
+DATA_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def load_zT(all_data=False):
     """
-
     Thermoelectric figures of merit for 165 experimentally measured compounds.
 
     Obtained from the Citrination database maintained by Citrine, Inc.
@@ -35,8 +38,8 @@ def load_zT(all_data=False):
         (pd.DataFrame): The dataframe containing the zT data.
 
     """
-
-    df = pd.read_csv("zT-citrination-165.csv", index_col=None)
+    path = os.path.join(DATA_DIR, "zT-citrination-165.csv")
+    df = pd.read_csv(path, index_col=None)
     if not all_data:
         df = df[["composition", "zT"]]
     return df
@@ -57,7 +60,8 @@ def load_e_form():
     Returns:
         (pd.DataFrame): The formation energies and compositions
     """
-    df = pd.read_csv("eform-materialsproject-85014.csv", index_col="mpid")
+    path = os.path.join(DATA_DIR, "eform-materialsproject-85014.csv")
+    df = pd.read_csv(path, index_col="mpid")
     return df
 
 
@@ -77,7 +81,8 @@ def load_bandgaps():
         (pd.DataFrame): Experimental band gaps and compositions as strings
 
     """
-    df = pd.read_csv("bandgap-zhuo-4604.csv", index_col=False)
+    path = os.path.join(DATA_DIR, "bandgap-zhuo-4604.csv")
+    df = pd.read_csv(path, index_col=False)
     return df
 
 
@@ -94,9 +99,9 @@ def load_steels():
     Returns:
         (pd.DataFrame): Dataframe of yield strengths per composition.
     """
-    df = pd.read_csv("yieldstrength-citrination-312.csv", index_col=False)
+    path = os.path.join(DATA_DIR, "yieldstrength-citrination-312.csv")
+    df = pd.read_csv(path, index_col=False)
     return df
-
 
 
 if __name__ == "__main__":
