@@ -3,17 +3,14 @@
 from __future__ import absolute_import, division, print_function, \
     unicode_literals
 import tensorflow as tf
-import pickle
 import tensorflow_probability as tfp
 from latmats.originals.keras_utils import example_generator_not_material, \
     example_generator_material, elements
-import os
 import numpy as np
 from collections import Counter
-import random
 import json
 
-from latmats.data_loader import load_file
+from latmats.pretraining.data_loader import load_file
 
 #todo: subSample not implemented
 
