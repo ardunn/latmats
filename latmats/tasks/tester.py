@@ -1,8 +1,9 @@
-import numpy as np
 import tqdm
 import copy
 import pickle
+import datetime
 
+import numpy as np
 from sklearn.model_selection import train_test_split, KFold, LeaveOneOut
 from sklearn.metrics import mean_absolute_error, r2_score, explained_variance_score, mean_squared_error
 
@@ -78,9 +79,6 @@ class AlgorithmBenchmark:
 
 
     def cross_validate(self, problem, quiet=False):
-        desc = f"cross validation for {self.estimator.__class__.__name__} on problem: '{problem}'"
-        if not quiet:
-            print(f"started: {desc}")
         splitter = self.data[problem]["cross_validation"]["cv_scheme"]
         df = self.data[problem]["cross_validation"]["df"]
         target = self._get_target_from_df(df)
@@ -92,6 +90,7 @@ class AlgorithmBenchmark:
         if quiet:
             splits = splitter.split(df)
         else:
+            desc = f"cross validation for {self.estimator.__class__.__name__} on problem: '{problem}'"
             splits = tqdm.tqdm(splitter.split(df), desc=desc, total=self.data[problem]["cross_validation"]["n_splits"])
 
         for train_ix, test_ix in splits:
@@ -113,8 +112,6 @@ class AlgorithmBenchmark:
         self.data[problem]["cross_validation"]["cv_scores"] = scores_avg
         self.data[problem]["cross_validation"]["dfs_folds"] = dfs_folds
 
-        if not quiet:
-            print(f"completed: {desc}")
         results = self.data[problem]["cross_validation"]
         return results
 
@@ -174,7 +171,10 @@ class AlgorithmBenchmark:
                 print(f"'{problem}' {metric}: {score}")
         return scores
 
-    def export_results(self, filename):
+    def export_results(self, filename=None):
+        if not filename:
+            now = datetime.datetime.now().strftime('%Y.%m.%d-%H.%M.%S')
+            filename = f"{self.estimator.__class__.__name__}-{now}.pkl"
         results = copy.deepcopy(self.data)
         with open(filename, "wb") as f:
             pickle.dump(results, f)\
@@ -200,7 +200,7 @@ if __name__ == "__main__":
     dummy_benchmark = AlgorithmBenchmark(DummyEstimator())
     dummy_benchmark.cross_validate_all_problems()
     dummy_benchmark.test_all_problems()
-    dummy_benchmark.export_results("dummy_results.pkl")
+    dummy_benchmark.export_results()
 
     # dummy_benchmark = AlgorithmBenchmark(RFEstimator())
     # dummy_benchmark.cross_validate_all_problems(quiet=False)
