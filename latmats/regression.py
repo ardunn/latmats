@@ -64,8 +64,8 @@ output = tf.keras.layers.Dense(units=2)(model_hidden_rep(input_matrices))
 regression_model = tf.keras.Model(inputs=input_matrices, outputs=output)
 
 
-df = load_e_form()
-# df = load_bandgaps()
+# df = load_e_form()
+df = load_bandgaps()
 
 # Ef for ground state materials courtesy Chris
 # input_file = "hullout.json"
@@ -82,8 +82,8 @@ features = []
 
 # for mat, v in input_data.items():
 
-# key = "bandgap (eV)"
-key = "e_form (eV/atom)"
+key = "bandgap (eV)"
+# key = "e_form (eV/atom)"
 for index, row in df.iterrows():
   try:
     # Transform each string material to its stoichiometry matrix representation
@@ -170,7 +170,14 @@ for train_indices, test_indices in kf.split(labels):
 
         return tf.reduce_mean(mae)
 
-    optimizer = tfa.optimizers.AdamW(learning_rate=5e-3, weight_decay=1e-6)
+    #todo: change params to eform
+    # optimizer = tfa.optimizers.AdamW(learning_rate=5e-3, weight_decay=1e-6)
+
+
+    # band gap
+    optimizer = tfa.optimizers.AdamW(learning_rate=5e-5, weight_decay=1e-8)
+
+
     regression_model.compile(optimizer=optimizer, loss=RobustL1, metrics=[unnormalized_mae])
 
     model_hidden_rep.summary()
@@ -203,11 +210,13 @@ for train_indices, test_indices in kf.split(labels):
     tensorboard_callback = keras.callbacks.TensorBoard(log_dir=logdir)
 
     regression_model.fit(features_train, targets_train,
-                       validation_split=0.25,
-                       epochs=100,
+                       validation_split=0.20,
+                       # epochs=1000,
+                         epochs=10000,
                         callbacks=[tensorboard_callback],
                        # callbacks=[callback_lr],
-                       batch_size=256
+                       # batch_size=1024
+                         batch_size=64
                          )
 
 
