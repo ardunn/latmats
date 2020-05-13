@@ -7,6 +7,7 @@ import tensorflow_probability as tfp
 import numpy as np
 from collections import Counter
 import json
+import os
 
 from latmats.pretraining.data_loader import load_file
 from latmats.utils import example_generator_not_material, example_generator_material, elements
@@ -116,25 +117,20 @@ def attention_layer(d_model, n_heads, name="encoder_layer"):
 
 class Word2VecPretrainingModel:
 
-    def __init__(self):
-        word_count = Counter()
-        for i, l in enumerate(abstracts_3mil):
-            if i % 100000 == 0:
-                print(i)
-            abstract = l.strip().split()
-            word_count.update(abstract)
-
-        corpus = []
-        for abstract in processed_abstracts:
-            corpus.append(json.loads(abstract))
-
-        self.dataset = tf.data.Dataset.from_generator(lambda: example_generator_not_material(corpus, window_size, word2index), ((tf.int64, tf.int64), tf.int64), output_shapes=((tf.TensorShape([]), tf.TensorShape([])), tf.TensorShape([]))).prefetch(tf.data.experimental.AUTOTUNE).batch(512)
-        self.dataset_material = tf.data.Dataset.from_generator(lambda: example_generator_material(corpus, window_size, word2index, material2index), ((tf.float32, tf.int64), tf.int64), output_shapes=((tf.TensorShape([9, n_elements]), tf.TensorShape([])), tf.TensorShape([]))).batch(512).prefetch(tf.data.experimental.AUTOTUNE)
+    def __init__(self, quiet=False):
+        self.quiet = quiet
         self.model_mat2vec = None
         self.model_word2vec = None
         self.model_mat2vec_hiddenrep = None
 
+        thisdir = os.path.dirname(os.path.abspath(__file__))
+        self.model_mat2vec_weights_file = os.path.join(thisdir, "mat2vec.keras")
+        self.model_word2vec_weights_file = os.path.join(thisdir, "word2vec.keras")
+        self.model_mat2vec_hiddenrep_weights_file = os.path.join(thisdir, "mat2vec_hiddenrep.keras")
+
     def compile(self):
+        if not self.quiet:
+            print("compiling model")
         input_context = tf.keras.Input(shape=(1,), name="inputs_context")
         embeddings_context = tf.keras.layers.Embedding(vocab_size, embedding_dimension, name="embeddings_context")
         sample_context_embedding = embeddings_context(input_context)
@@ -189,27 +185,58 @@ class Word2VecPretrainingModel:
         self.model_mat2vec = model_mat2vec                       # outputs word embedding of material
         self.model_mat2vec_hiddenrep = model_mat2vec_hiddenrep   # outputs attention layer of model_mat2vec
 
+        if not self.quiet:
+            print("model compiled.")
+
     def summarize(self):
         self.model_word2vec.summary()
         self.model_mat2vec.summary()
         self.model_mat2vec_hiddenrep.summary()
 
     def train(self):
-        for i in range(20):
-            self.model_word2vec.fit(self.dataset, steps_per_epoch=1000, epochs=1)
-            self.model_mat2vec.fit(self.dataset_material, steps_per_epoch=1000, epochs=1)
+        # word_count = Counter()
+        # for i, l in enumerate(abstracts_3mil):
+        #     if i % 100000 == 0:
+        #         print(i)
+        #     abstract = l.strip().split()
+        #     word_count.update(abstract)
+
+        if not self.quiet:
+            print("generating pretraining datasets")
+
+        corpus = []
+        for abstract in processed_abstracts:
+            corpus.append(json.loads(abstract))
+        dataset = tf.data.Dataset.from_generator(lambda: example_generator_not_material(corpus, window_size, word2index), ((tf.int64, tf.int64), tf.int64), output_shapes=((tf.TensorShape([]), tf.TensorShape([])), tf.TensorShape([]))).prefetch(tf.data.experimental.AUTOTUNE).batch(512)
+        dataset_material = tf.data.Dataset.from_generator(lambda: example_generator_material(corpus, window_size, word2index, material2index), ((tf.float32, tf.int64), tf.int64), output_shapes=((tf.TensorShape([9, n_elements]), tf.TensorShape([])), tf.TensorShape([]))).batch(512).prefetch(tf.data.experimental.AUTOTUNE)
+
+
+        if not self.quiet:
+            print("completed pretraining datasets")
+            print("training model...")
+
+        n_training_cyles = 20
+        for i in range():
+            if not self.quiet:
+                print(f"training cycle {i}/{n_training_cyles}")
+            self.model_word2vec.fit(dataset, steps_per_epoch=1000, epochs=1)
+            self.model_mat2vec.fit(dataset_material, steps_per_epoch=1000, epochs=1)
             # self.model_mat2vec_hiddenrep.save_weights("mat2vec_hiddenrep{}.keras".format(i))
 
     def save_weights(self):
-        self.model_word2vec.save_weights("word2vec.keras")
-        self.model_mat2vec.save_weights("mat2vec.keras")
-        self.model_mat2vec_hiddenrep.save_weights("mat2vec_hiddenrep.keras")
+        self.model_word2vec.save_weights(self.model_word2vec_weights_file)
+        self.model_mat2vec.save_weights(self.model_mat2vec_weights_file)
+        self.model_mat2vec_hiddenrep.save_weights(self.model_mat2vec_hiddenrep_weights_file)
 
     def load_weights(self):
-        self.model_word2vec.load_weights("word2vec.keras")
-        self.model_mat2vec.load_weights("mat2vec.keras")
-        # print(model_material([[1], [1.]))
+        if not self.quiet:
+            print("loading model weights")
+        self.model_word2vec.load_weights(self.model_word2vec_weights_file)
+        self.model_mat2vec.load_weights(self.model_mat2vec_weights_file)
 
+        if not self.quiet:
+            print("model weights loaded")
+        # print(model_material([[1], [1.]))
 
 
 if __name__ == "__main__":

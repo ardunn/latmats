@@ -2,8 +2,7 @@ import os
 import pickle
 
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../data")
-
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data/")
 
 def open_pickle(filename):
     """
