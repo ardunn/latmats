@@ -31,7 +31,7 @@ from latmats.tasks.loader import load_e_form, load_bandgaps
 
 
 w2vpm = Word2VecPretrainingModel()
-w2vpm.compile(freeze_mat2vec=False)
+w2vpm.compile()
 w2vpm.load_weights()
 model_hidden_rep = w2vpm.model_mat2vec_hiddenrep
 
@@ -58,13 +58,7 @@ input_matrices = tf.keras.layers.Input(shape=(max_len, len(elements) + 1))
 # Interpret first value as prediction for quantity (ie Ef)
 # And second as an estimate of uncertainty
 # Allows the model to indicate levels of certainty
-# todo: original was 2 units
-# output = tf.keras.layers.Dense(units=2)(model_hidden_rep(input_matrices))
-
-output = tf.keras.layers.Dense(units=2, activation="sigmoid")\
-    (tf.keras.layers.Dense(units=128, activation="sigmoid")(model_hidden_rep(input_matrices)))
-
-
+output = tf.keras.layers.Dense(units=2)(model_hidden_rep(input_matrices))
 regression_model = tf.keras.Model(inputs=input_matrices, outputs=output)
 
 
@@ -126,19 +120,18 @@ def RobustL1(x_true, x_pred):
   return tf.reduce_mean(loss)
 
 
-# def RobustL2(x_true, x_pred):
-#   """
-#   Robust L2 loss using a gaussian prior. Allows for estimation
-#   of an aleatoric uncertainty.
-#   """
-#   output = x_pred[:, 0]
-#   log_std = x_pred[:, 1]
-#   target = x_true[:, 0]
-#
-#   loss = 0.5 * tf.pow(output - target, 2.0) * \
-#       tf.exp(- 2.0 * log_std) + log_std
-#   return tf.reduce_mean(loss)
+def RobustL2(x_true, x_pred):
+  """
+  Robust L2 loss using a gaussian prior. Allows for estimation
+  of an aleatoric uncertainty.
+  """
+  output = x_pred[:, 0]
+  log_std = x_pred[:, 1]
+  target = x_true[:, 0]
 
+  loss = 0.5 * tf.pow(output - target, 2.0) * \
+      tf.exp(- 2.0 * log_std) + log_std
+  return tf.reduce_mean(loss)
 
 
 f = 0
@@ -147,7 +140,7 @@ for train_indices, test_indices in kf.split(labels):
     f += 1
     # optimizer = tfa.optimizers.Yogi(learning_rate=5e-4)
     # Regular adam or adamw work fine
-    optimizer = tfa.optimizers.AdamW(learning_rate=5e-4, weight_decay=1e-6)
+    optimizer = tfa.optimizers.AdamW(learning_rate=5e-4, weight_decay=1e-3)
     targets_train = targets[train_indices]
     labels_train = labels[train_indices]
     features_train = features[train_indices]
@@ -174,12 +167,8 @@ for train_indices, test_indices in kf.split(labels):
 
         return tf.reduce_mean(mae)
 
-    #todo: change params to eform
-    # optimizer = tfa.optimizers.AdamW(learning_rate=5e-3, weight_decay=1e-6)
-
-
     # band gap
-    optimizer = tfa.optimizers.AdamW(learning_rate=5e-5, weight_decay=1e-8)
+    optimizer = tfa.optimizers.AdamW(learning_rate=5e-3, weight_decay=1e-6)
 
 
     regression_model.compile(optimizer=optimizer, loss=RobustL1, metrics=[unnormalized_mae])
@@ -187,25 +176,25 @@ for train_indices, test_indices in kf.split(labels):
     model_hidden_rep.summary()
     regression_model.summary()
 
-    # def cyclical_lr(period=10, cycle_mul=0.1, tune_mul=0.05, initial_lr=5e-3):
-    #     # Scaler: we can adapt this if we do not want the triangular CLR
-    #   def scaler(x): return 1.
-    #
-    #   # Lambda function to calculate the LR
-    #   def lr_lambda(it):
-    #     lr = initial_lr * (cycle_mul +
-    #                        (1. - cycle_mul) * relative(it, period))
-    #     return lr * tf.math.exp(-0.001 * it)
-    #
-    #   # Additional function to see where on the cycle we are
-    #   def relative(it, stepsize):
-    #     cycle = math.floor(1 + it / (period))
-    #     x = abs(2 * (it / period - cycle) + 1)
-    #     return max(0, (1 - x)) * scaler(cycle)
-    #
-    #   return lr_lambda
-    #
-    # callback_lr = tf.keras.callbacks.LearningRateScheduler(cyclical_lr())
+    def cyclical_lr(period=10, cycle_mul=0.1, tune_mul=0.05, initial_lr=5e-3):
+        # Scaler: we can adapt this if we do not want the triangular CLR
+      def scaler(x): return 1.
+
+      # Lambda function to calculate the LR
+      def lr_lambda(it):
+        lr = initial_lr * (cycle_mul +
+                           (1. - cycle_mul) * relative(it, period))
+        return lr * tf.math.exp(-0.001 * it)
+
+      # Additional function to see where on the cycle we are
+      def relative(it, stepsize):
+        cycle = math.floor(1 + it / (period))
+        x = abs(2 * (it / period - cycle) + 1)
+        return max(0, (1 - x)) * scaler(cycle)
+
+      return lr_lambda
+
+    callback_lr = tf.keras.callbacks.LearningRateScheduler(cyclical_lr())
 
     # model_hidden_rep.load_weights("hidden_rep0.keras")
 
@@ -217,10 +206,10 @@ for train_indices, test_indices in kf.split(labels):
                        validation_split=0.20,
                        # epochs=1000,
                          epochs=10000,
-                        callbacks=[tensorboard_callback],
+                        callbacks=[tensorboard_callback, callback_lr],
                        # callbacks=[callback_lr],
                        # batch_size=1024
-                         batch_size=64
+                         batch_size=128
                          )
 
 

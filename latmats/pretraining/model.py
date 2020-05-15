@@ -128,9 +128,8 @@ class Word2VecPretrainingModel:
         self.model_word2vec_weights_file = os.path.join(thisdir, "word2vec.keras")
         self.model_mat2vec_hiddenrep_weights_file = os.path.join(thisdir, "mat2vec_hiddenrep.keras")
 
-    def compile(self, freeze_mat2vec=False):
-        if not self.quiet:
-            print("compiling model")
+    def compile(self):
+        print("compiling model") if not self.quiet else None
         input_context = tf.keras.Input(shape=(1,), name="inputs_context")
         embeddings_context = tf.keras.layers.Embedding(vocab_size, embedding_dimension, name="embeddings_context")
         sample_context_embedding = embeddings_context(input_context)
@@ -182,11 +181,6 @@ class Word2VecPretrainingModel:
         # todo: rename models
         model_mat2vec = tf.keras.Model(inputs=[input_matrices, input_context], outputs=loss_material)
 
-        if freeze_mat2vec:
-            for layer in model_mat2vec.layers:
-                layer.trainable = False
-            print("model_mat2vec frozen.") if not self.quiet else None
-
         model_mat2vec.compile(optimizer='adam', loss='mse')
 
         self.model_word2vec = model_word2vec                     # outputs word2vec embedding
@@ -214,8 +208,7 @@ class Word2VecPretrainingModel:
 
         n_training_cyles = 20
         for i in range():
-            if not self.quiet:
-                print(f"training cycle {i}/{n_training_cyles}")
+            print(f"training cycle {i}/{n_training_cyles}") if not self.quiet else None
             self.model_word2vec.fit(dataset, steps_per_epoch=1000, epochs=1)
             self.model_mat2vec.fit(dataset_material, steps_per_epoch=1000, epochs=1)
             # self.model_mat2vec_hiddenrep.save_weights("mat2vec_hiddenrep{}.keras".format(i))
@@ -226,21 +219,16 @@ class Word2VecPretrainingModel:
         self.model_mat2vec_hiddenrep.save_weights(self.model_mat2vec_hiddenrep_weights_file)
 
     def load_weights(self):
-        if not self.quiet:
-            print("loading model weights")
+        print("loading model weights") if not self.quiet else None
         self.model_word2vec.load_weights(self.model_word2vec_weights_file)
         self.model_mat2vec.load_weights(self.model_mat2vec_weights_file)
-
-        if not self.quiet:
-            print("model weights loaded")
-        # print(model_material([[1], [1.]))
+        print("model weights loaded") if not self.quiet else None
 
 
 if __name__ == "__main__":
     w2v = Word2VecPretrainingModel()
     w2v.compile()
     w2v.load_weights()
-    w2v.freeze_models()
 
 
 
