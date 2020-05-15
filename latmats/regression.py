@@ -31,7 +31,7 @@ from latmats.tasks.loader import load_e_form, load_bandgaps
 
 
 w2vpm = Word2VecPretrainingModel()
-w2vpm.compile()
+w2vpm.compile(freeze_mat2vec=False)
 w2vpm.load_weights()
 model_hidden_rep = w2vpm.model_mat2vec_hiddenrep
 
@@ -58,14 +58,18 @@ input_matrices = tf.keras.layers.Input(shape=(max_len, len(elements) + 1))
 # Interpret first value as prediction for quantity (ie Ef)
 # And second as an estimate of uncertainty
 # Allows the model to indicate levels of certainty
-output = tf.keras.layers.Dense(units=2)(model_hidden_rep(input_matrices))
+# todo: original was 2 units
+# output = tf.keras.layers.Dense(units=2)(model_hidden_rep(input_matrices))
+
+output = tf.keras.layers.Dense(units=2, activation="sigmoid")\
+    (tf.keras.layers.Dense(units=128, activation="sigmoid")(model_hidden_rep(input_matrices)))
 
 
 regression_model = tf.keras.Model(inputs=input_matrices, outputs=output)
 
 
 # df = load_e_form()
-df = load_bandgaps()
+df = load_e_form()
 
 # Ef for ground state materials courtesy Chris
 # input_file = "hullout.json"
@@ -82,8 +86,8 @@ features = []
 
 # for mat, v in input_data.items():
 
-key = "bandgap (eV)"
-# key = "e_form (eV/atom)"
+# key = "bandgap (eV)"
+key = "e_form (eV/atom)"
 for index, row in df.iterrows():
   try:
     # Transform each string material to its stoichiometry matrix representation

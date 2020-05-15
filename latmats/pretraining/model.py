@@ -14,12 +14,12 @@ from latmats.utils import example_generator_not_material, example_generator_mate
 
 #todo: subSample not implemented
 
-word2index = load_file('word2index_3mil.pkl')
-index2word = load_file('index2word_3mil.pkl')
-material2index = load_file('material2index.pkl')
-index2material = load_file('index2material.pkl')
-abstracts_3mil = load_file("abstracts_3mil.txt", as_lines=True)
-processed_abstracts = load_file("processed_abstracts.txt", as_lines=True)
+word2index = load_file('word2index_3mil.pkl')                               #only needed at compile
+# index2word = load_file('index2word_3mil.pkl')
+material2index = load_file('material2index.pkl')                            # only needed at train
+# index2material = load_file('index2material.pkl')
+# abstracts_3mil = load_file("abstracts_3mil.txt", as_lines=True)             # only needed at train
+processed_abstracts = load_file("processed_abstracts.txt", as_lines=True)   # only needed at train
 
 vocab_size = len(word2index.keys())
 embedding_dimension = 200
@@ -128,7 +128,7 @@ class Word2VecPretrainingModel:
         self.model_word2vec_weights_file = os.path.join(thisdir, "word2vec.keras")
         self.model_mat2vec_hiddenrep_weights_file = os.path.join(thisdir, "mat2vec_hiddenrep.keras")
 
-    def compile(self):
+    def compile(self, freeze_mat2vec=False):
         if not self.quiet:
             print("compiling model")
         input_context = tf.keras.Input(shape=(1,), name="inputs_context")
@@ -178,15 +178,22 @@ class Word2VecPretrainingModel:
 
         model_word2vec.compile(optimizer='adam', loss='mse')
 
+
+        # todo: rename models
         model_mat2vec = tf.keras.Model(inputs=[input_matrices, input_context], outputs=loss_material)
+
+        if freeze_mat2vec:
+            for layer in model_mat2vec.layers:
+                layer.trainable = False
+            print("model_mat2vec frozen.") if not self.quiet else None
+
         model_mat2vec.compile(optimizer='adam', loss='mse')
 
         self.model_word2vec = model_word2vec                     # outputs word2vec embedding
         self.model_mat2vec = model_mat2vec                       # outputs word embedding of material
         self.model_mat2vec_hiddenrep = model_mat2vec_hiddenrep   # outputs attention layer of model_mat2vec
 
-        if not self.quiet:
-            print("model compiled.")
+        print("model compiled.") if not self.quiet else None
 
     def summarize(self):
         self.model_word2vec.summary()
@@ -194,13 +201,6 @@ class Word2VecPretrainingModel:
         self.model_mat2vec_hiddenrep.summary()
 
     def train(self):
-        # word_count = Counter()
-        # for i, l in enumerate(abstracts_3mil):
-        #     if i % 100000 == 0:
-        #         print(i)
-        #     abstract = l.strip().split()
-        #     word_count.update(abstract)
-
         if not self.quiet:
             print("generating pretraining datasets")
 
@@ -210,10 +210,7 @@ class Word2VecPretrainingModel:
         dataset = tf.data.Dataset.from_generator(lambda: example_generator_not_material(corpus, window_size, word2index), ((tf.int64, tf.int64), tf.int64), output_shapes=((tf.TensorShape([]), tf.TensorShape([])), tf.TensorShape([]))).prefetch(tf.data.experimental.AUTOTUNE).batch(512)
         dataset_material = tf.data.Dataset.from_generator(lambda: example_generator_material(corpus, window_size, word2index, material2index), ((tf.float32, tf.int64), tf.int64), output_shapes=((tf.TensorShape([9, n_elements]), tf.TensorShape([])), tf.TensorShape([]))).batch(512).prefetch(tf.data.experimental.AUTOTUNE)
 
-
-        if not self.quiet:
-            print("completed pretraining datasets")
-            print("training model...")
+        print("completed pretraining datasets\ntraining model...") if not self.quiet else None
 
         n_training_cyles = 20
         for i in range():
@@ -240,7 +237,10 @@ class Word2VecPretrainingModel:
 
 
 if __name__ == "__main__":
-    pass
+    w2v = Word2VecPretrainingModel()
+    w2v.compile()
+    w2v.load_weights()
+    w2v.freeze_models()
 
 
 
