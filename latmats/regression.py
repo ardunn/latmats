@@ -12,19 +12,7 @@ from sklearn.preprocessing import StandardScaler
 
 
 from latmats.pretraining.model import Word2VecPretrainingModel
-from latmats.tasks.loader import load_e_form, load_bandgaps
-
-
-
-
-# attention = tf.keras.layers.GlobalAveragePooling1D(data_format='channels_last')(attention)
-#
-# # A couple of fully connected layers to transform to output dimension
-# attention = tf.keras.layers.Dense(units=d_model / 2, activation=None)(attention)
-#
-# attention = tf.keras.layers.PReLU()(attention)
-#
-# model_hidden_rep = tf.keras.Model(inputs=input_matrices, outputs=attention)
+from latmats.tasks.loader import load_e_form, load_expt_gaps
 
 
 w2vpm = Word2VecPretrainingModel()
@@ -35,14 +23,9 @@ model_hidden_rep = w2vpm.model_mat2vec_hiddenrep
 
 w2vpm.summarize()
 
-# raise ValueError
 
 
 max_len = 9
-d_model = 128
-n_layers = 1
-n_heads = 4
-dropout = 0.1
 
 # Input for one material is a matrix of size max_material_length x n_elements + 1
 # Each embeds ONE component element's absolute count, final column is fraction of total

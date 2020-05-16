@@ -265,6 +265,12 @@ if __name__ == "__main__":
     w2v.save_weights()
 
 
+    # w2v_attention = Word2VecPretrainingModel(name="attention", n_layers=1)
+    # w2v_attention.compile()
+    # w2v_attention.train()
+    # w2v_attention.save_weights()
+
+
 
 
 
