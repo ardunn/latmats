@@ -7,7 +7,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split, KFold, LeaveOneOut
 from sklearn.metrics import mean_absolute_error, r2_score, explained_variance_score, mean_squared_error
 
-from latmats.tasks.loader import load_e_form, load_bandgaps, load_steels, load_zT
+from latmats.tasks.loader import load_e_form, load_expt_gaps, load_steels, load_zT
 
 
 class AlgorithmBenchmark:
@@ -16,7 +16,7 @@ class AlgorithmBenchmark:
         config = {}
         self.estimator = estimator
 
-        for problem in ["zT", "steels", "bandgap", "e_form"]:
+        for problem in ["zT", "steels", "expt_gap", "e_form"]:
 
             if problem == "zT":
                 df = load_zT(all_data=False)
@@ -26,8 +26,8 @@ class AlgorithmBenchmark:
                 df = load_steels()
                 cv_scheme = LeaveOneOut()
                 n_splits = cv_scheme.get_n_splits(df["composition"])
-            elif problem == "bandgap":
-                df = load_bandgaps()
+            elif problem == "expt_gaps":
+                df = load_expt_gaps()
                 cv_scheme = KFold(n_splits=10, shuffle=True, random_state=random_state_cv)
                 n_splits = cv_scheme.n_splits
             elif problem == "e_form":

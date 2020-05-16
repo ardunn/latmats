@@ -50,7 +50,7 @@ class Word2VecPretrainingModel:
         self.word2index = None
 
     def compile(self):
-        print("compiling model") if not self.quiet else None
+        self._qprint("compiling model")
 
         self.word2index = load_file('word2index_3mil.pkl', quiet=self.quiet)
         vocab_size = len(self.word2index.keys())
@@ -78,7 +78,7 @@ class Word2VecPretrainingModel:
 
         model_word2vec = tf.keras.Model(inputs=[input_target, input_context], outputs=loss)
 
-        input_matrices = tf.keras.layers.Input(shape=(self.max_len, len(elements) + 1))
+        input_matrices = tf.keras.layers.Input(shape=(self.max_len, len(elements)))
         attention = tf.keras.layers.Dense(units=self.d_model)(input_matrices)
 
         mask = tf.keras.layers.Lambda(self._create_padding_mask, output_shape=(1, 1, self.max_len), name='enc_padding_mask')(input_matrices)
@@ -122,15 +122,15 @@ class Word2VecPretrainingModel:
         self.model_mat2vec = model_mat2vec                       # outputs word embedding of material
         self.model_mat2vec_hiddenrep = model_mat2vec_hiddenrep   # outputs attention layer of model_mat2vec
 
-        print("model compiled.") if not self.quiet else None
+        self._qprint("model compiled.")
 
     def summarize(self):
         self.model_word2vec.summary()
         self.model_mat2vec.summary()
         self.model_mat2vec_hiddenrep.summary()
 
-    def train(self):
-        print("generating pretraining datasets") if not self.quiet else None
+    def train(self, only_mat2vec=False):
+        self._qprint("generating pretraining datasets...")
 
         corpus = []
         processed_abstracts = load_file("processed_abstracts.txt", as_lines=True, quiet=self.quiet)
@@ -138,15 +138,15 @@ class Word2VecPretrainingModel:
             corpus.append(json.loads(abstract))
 
         material2index = load_file('material2index.pkl', quiet=self.quiet)
-        n_elements = len(elements) + 1
+        n_elements = len(elements)
         dataset = tf.data.Dataset.from_generator(lambda: example_generator_not_material(corpus, self.window_size, self.word2index), ((tf.int64, tf.int64), tf.int64), output_shapes=((tf.TensorShape([]), tf.TensorShape([])), tf.TensorShape([]))).prefetch(tf.data.experimental.AUTOTUNE).batch(512)
         dataset_material = tf.data.Dataset.from_generator(lambda: example_generator_material(corpus, self.window_size, self.word2index, material2index), ((tf.float32, tf.int64), tf.int64), output_shapes=((tf.TensorShape([9, n_elements]), tf.TensorShape([])), tf.TensorShape([]))).batch(512).prefetch(tf.data.experimental.AUTOTUNE)
 
-        print("completed pretraining datasets\ntraining model...") if not self.quiet else None
+        self._qprint("completed pretraining datasets\ntraining model...")
 
         # n_training_cyles = 20
         # for i in range(n_training_cyles):
-        #     print(f"training cycle {i}/{n_training_cyles}") if not self.quiet else None
+        #     self._qprint(f"training cycle {i}/{n_training_cyles}")
         #     self.model_word2vec.fit(dataset, steps_per_epoch=1000, epochs=1)
         #     self.model_mat2vec.fit(dataset_material, steps_per_epoch=1000, epochs=1)
         #     # self.model_mat2vec_hiddenrep.save_weights("mat2vec_hiddenrep{}.keras".format(i))
@@ -158,11 +158,19 @@ class Word2VecPretrainingModel:
             monitor='loss', min_delta=0, patience=1,
         )
 
-        print("training word2vec...") if not self.quiet else None
-        self.model_word2vec.fit(dataset, steps_per_epoch=1000, epochs=25, callbacks=[early_stopping, tensorboard_callback])
-        print("word2vec trained.\ntraining mat2vec...") if not self.quiet else None
+        if only_mat2vec:
+            self._qprint("reloading previously trained word2vec weights...")
+            self.model_word2vec.load_weights(self.model_word2vec_weights_file)
+            self._qprint("loaded previously trained word2vec weights.")
+        else:
+            self._qprint("training word2vec...")
+            self.model_word2vec.fit(dataset, steps_per_epoch=1000, epochs=25, callbacks=[early_stopping, tensorboard_callback])
+            self._qprint("word2vec trained.")
+
+
+        self._qprint("training mat2vec...")
         self.model_mat2vec.fit(dataset_material, steps_per_epoch=500, epochs=15, callbacks=[early_stopping, tensorboard_callback])
-        print("mat2vec trained") if not self.quiet else None
+        self._qprint("mat2vec trained")
 
     def save_weights(self):
         self.model_word2vec.save_weights(self.model_word2vec_weights_file)
@@ -170,10 +178,10 @@ class Word2VecPretrainingModel:
         self.model_mat2vec_hiddenrep.save_weights(self.model_mat2vec_hiddenrep_weights_file)
 
     def load_weights(self):
-        print("loading model weights") if not self.quiet else None
+        self._qprint("loading model weights")
         self.model_word2vec.load_weights(self.model_word2vec_weights_file)
         self.model_mat2vec.load_weights(self.model_mat2vec_weights_file)
-        print("model weights loaded") if not self.quiet else None
+        self._qprint("model weights loaded")
 
     @staticmethod
     def _negative_samples_contract(x):
@@ -253,22 +261,27 @@ class Word2VecPretrainingModel:
             inputs_norm + attention)
         outputs = tf.keras.layers.PReLU()(attention)
 
-        return tf.keras.Model(inputs=[inputs, input_mask], outputs=outputs,
-                              name=name)
+        return tf.keras.Model(inputs=[inputs, input_mask], outputs=outputs, name=name)
+
+    def _qprint(self, str):
+        print(str) if not self.quiet else None
+
+
+
 
 
 if __name__ == "__main__":
-    w2v = Word2VecPretrainingModel(name="refactor_dense", n_layers=2)
-    w2v.compile()
+    # w2v = Word2VecPretrainingModel(name="refactor_dense", n_layers=2)
+    # w2v.compile()
     # w2v.load_weights()
-    w2v.train()
-    w2v.save_weights()
+    # w2v.train()
+    # w2v.save_weights()
 
 
-    # w2v_attention = Word2VecPretrainingModel(name="attention", n_layers=1)
-    # w2v_attention.compile()
-    # w2v_attention.train()
-    # w2v_attention.save_weights()
+    w2v_attention = Word2VecPretrainingModel(name="attention2by8", use_attention=True, n_layers=2, n_heads=8)
+    w2v_attention.compile()
+    w2v_attention.train(only_mat2vec=True)
+    w2v_attention.save_weights()
 
 
 
