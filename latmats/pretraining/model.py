@@ -1,176 +1,111 @@
-#!/usr/bin/env python
-# coding: utf-8
-from __future__ import absolute_import, division, print_function, \
-    unicode_literals
+import os
+import json
+
+import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
-import numpy as np
-from collections import Counter
-import json
-import os
 
 from latmats.pretraining.data_loader import load_file
 from latmats.utils import example_generator_not_material, example_generator_material, elements
 
-#todo: subSample not implemented
-
-word2index = load_file('word2index_3mil.pkl')                               #only needed at compile
-# index2word = load_file('index2word_3mil.pkl')
-material2index = load_file('material2index.pkl')                            # only needed at train
-# index2material = load_file('index2material.pkl')
-# abstracts_3mil = load_file("abstracts_3mil.txt", as_lines=True)             # only needed at train
-processed_abstracts = load_file("processed_abstracts.txt", as_lines=True)   # only needed at train
-
-vocab_size = len(word2index.keys())
-embedding_dimension = 200
-max_len = 9
-d_model = 128
-n_layers = 1
-n_heads = 4
-dropout = 0.1
-window_size = 5
-neg_samples = 10
-dropout = 0.1
-n_elements = len(elements) + 1
-
-
-def negative_samples_contract(x):
-    return tf.einsum('ijk,lk->ijl', x[0], x[1])
-
-
-def positive_loss(ypred):
-    return tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(ypred), logits=ypred)
-
-
-def negative_loss(ypred):
-    return tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.zeros_like(ypred), logits=ypred)
-
-
-def create_padding_mask(input_matrices):
-    mask = tf.reduce_sum(input_matrices, axis=-1, keepdims=False)
-    mask = tf.cast(tf.math.equal(mask, 0), dtype=tf.float32)
-    return mask[:, tf.newaxis, tf.newaxis, :]
-
-
-def scaled_dot_product_attention(query, key, value, mask):
-    """Calculate the attention weights. """
-    matmul_qk = tf.matmul(query, key, transpose_b=True)
-
-    # scale matmul_qk
-    depth = tf.cast(tf.shape(key)[-1], tf.float32)
-    logits = matmul_qk / tf.math.sqrt(depth)
-
-    # add the mask to zero out padding tokens
-    if mask is not None:
-        logits += (mask * -1e9)
-
-    # softmax is normalized on the last axis (seq_len_k)
-    attention_weights = tf.nn.softmax(logits, axis=-1)
-
-    # attention_weights = tf.keras.layers.Dropout(rate=dropout)(attention_weights)
-    output = tf.matmul(attention_weights, value)
-    return output
-
-
-def attention_layer(d_model, n_heads, name="encoder_layer"):
-    inputs = tf.keras.layers.Input(shape=(max_len, d_model), name="inputs")
-
-    input_mask = tf.keras.layers.Input(shape=(1, 1, max_len,), name="mask")
-    inputs_norm = tf.keras.layers.LayerNormalization(
-      epsilon=1e-6)(inputs)
-
-    batch_size = tf.shape(inputs)[0]
-
-    def split_heads(inputs, batch_size):
-        inputs = tf.reshape(
-            inputs, shape=(batch_size, -1, n_heads, d_model // n_heads))
-        return tf.transpose(inputs, perm=[0, 2, 1, 3])
-
-    query = tf.keras.layers.Dense(units=d_model)(inputs_norm)
-    # query = tf.keras.layers.PReLU()(query)
-    # query = tf.keras.layers.Dense(units=d_model)(query)
-
-    key = tf.keras.layers.Dense(units=d_model)(inputs_norm)
-    # key = tf.keras.layers.PReLU()(key)
-    # key = tf.keras.layers.Dense(units=d_model)(key)
-
-    value = tf.keras.layers.Dense(units=d_model)(inputs_norm)
-    # value = tf.keras.layers.PReLU()(value)
-    # value = tf.keras.layers.Dense(units=d_model)(value)
-
-    query = split_heads(query, batch_size)
-    key = split_heads(key, batch_size)
-    value = split_heads(value, batch_size)
-
-    scaled_attention = scaled_dot_product_attention(query, key, value, input_mask)
-    scaled_attention = tf.transpose(scaled_attention, perm=[0, 2, 1, 3])
-
-    # concatenation of heads
-    concat_attention = tf.reshape(scaled_attention, (batch_size, -1, d_model))
-
-    attention = tf.keras.layers.Dense(units=d_model)(concat_attention)
-    attention = tf.keras.layers.LayerNormalization(epsilon=1e-6)(inputs_norm + attention)
-    outputs = tf.keras.layers.PReLU()(attention)
-
-    return tf.keras.Model(inputs=[inputs, input_mask], outputs=outputs, name=name)
-
 
 class Word2VecPretrainingModel:
-
-    def __init__(self, quiet=False):
+    def __init__(self,
+                 quiet=False,
+                 name=None,
+                 embedding_dimension=200,
+                 d_model=128,
+                 max_len=9,
+                 n_layers=1,
+                 n_heads=4,
+                 dropout=0.1,
+                 window_size=5,
+                 neg_samples=10,
+                 use_attention=True,
+                 ):
         self.quiet = quiet
         self.model_mat2vec = None
         self.model_word2vec = None
         self.model_mat2vec_hiddenrep = None
+        self.name = "no name" if not name else name
+
+        suffix = f"_{name}" if name else ""
 
         thisdir = os.path.dirname(os.path.abspath(__file__))
-        self.model_mat2vec_weights_file = os.path.join(thisdir, "mat2vec.keras")
-        self.model_word2vec_weights_file = os.path.join(thisdir, "word2vec.keras")
-        self.model_mat2vec_hiddenrep_weights_file = os.path.join(thisdir, "mat2vec_hiddenrep.keras")
+        self.model_mat2vec_weights_file = os.path.join(thisdir, f"mat2vec{suffix}.keras")
+        self.model_word2vec_weights_file = os.path.join(thisdir, f"word2vec{suffix}.keras")
+        self.model_mat2vec_hiddenrep_weights_file = os.path.join(thisdir, f"mat2vec_hiddenrep{suffix}.keras")
+
+
+        self.embedding_dimension = embedding_dimension
+        self.d_model = d_model
+        self.max_len = max_len
+        self.n_layers = n_layers
+        self.n_heads = n_heads
+        self.dropout = dropout
+        self.window_size = window_size
+        self.neg_samples = neg_samples
+        self.use_attention = use_attention
+
+        self.word2index = None
 
     def compile(self):
         print("compiling model") if not self.quiet else None
+
+        self.word2index = load_file('word2index_3mil.pkl', quiet=self.quiet)
+        vocab_size = len(self.word2index.keys())
+
         input_context = tf.keras.Input(shape=(1,), name="inputs_context")
-        embeddings_context = tf.keras.layers.Embedding(vocab_size, embedding_dimension, name="embeddings_context")
+        embeddings_context = tf.keras.layers.Embedding(vocab_size, self.embedding_dimension, name="embeddings_context")
         sample_context_embedding = embeddings_context(input_context)
 
         input_target = tf.keras.Input(shape=(1,), name="inputs_target")
-        embeddings_target = tf.keras.layers.Embedding(vocab_size, embedding_dimension, name="embeddings_target")
+        embeddings_target = tf.keras.layers.Embedding(vocab_size, self.embedding_dimension, name="embeddings_target")
         sample_target_embedding = embeddings_target(input_target)
 
         negative_sample_distribution = tfp.distributions.Categorical(logits=np.arange(vocab_size))
-        negative_samples = negative_sample_distribution.sample(sample_shape=(neg_samples,))
+        negative_samples = negative_sample_distribution.sample(sample_shape=(self.neg_samples,))
         negative_target_embeddings = embeddings_target(negative_samples)
 
         positive_probability = tf.keras.layers.Dot(axes=(2, 2))([sample_context_embedding, sample_target_embedding])
-        negative_probability = tf.keras.layers.Lambda(negative_samples_contract)([sample_context_embedding, negative_target_embeddings])
+        negative_probability = tf.keras.layers.Lambda(self._negative_samples_contract)([sample_context_embedding, negative_target_embeddings])
 
-        positive_loss_tensor = tf.keras.layers.Lambda(positive_loss)(positive_probability)
-        negative_loss_tensor = tf.keras.layers.Lambda(negative_loss)(negative_probability)
+        positive_loss_tensor = tf.keras.layers.Lambda(self._positive_loss)(positive_probability)
+        negative_loss_tensor = tf.keras.layers.Lambda(self._negative_loss)(negative_probability)
 
         loss = tf.keras.layers.Concatenate()([positive_loss_tensor, negative_loss_tensor])
         loss = tf.keras.layers.Lambda(lambda x: tf.keras.backend.squeeze(tf.keras.backend.sum(x, axis=2, keepdims=False), axis=1))(loss)
 
         model_word2vec = tf.keras.Model(inputs=[input_target, input_context], outputs=loss)
 
-        input_matrices = tf.keras.layers.Input(shape=(max_len, len(elements) + 1))
-        mask = tf.keras.layers.Lambda(create_padding_mask, output_shape=(1, 1, max_len), name='enc_padding_mask')(input_matrices)
-        attention = tf.keras.layers.Dense(units=d_model)(input_matrices)
+        input_matrices = tf.keras.layers.Input(shape=(self.max_len, len(elements) + 1))
+        attention = tf.keras.layers.Dense(units=self.d_model)(input_matrices)
 
-        for i in range(n_layers):
-            attention = attention_layer(d_model, n_heads, name=str(i + 1))([attention, mask])
+        mask = tf.keras.layers.Lambda(self._create_padding_mask, output_shape=(1, 1, self.max_len), name='enc_padding_mask')(input_matrices)
+
+        for i in range(self.n_layers):
+            if self.use_attention:
+                attention = self._attention_layer(self.d_model, self.n_heads, name=str(i + 1))([attention, mask])
+            else:
+                # attention = tf.keras.layers.Dense(units=self.d_model, activation="relu")(attention)
+                attention = tf.keras.layers.LeakyReLU(alpha=0.05)(attention)
+
+        # Output of attention layers is d_model * n_elements
+        # Average over elements to get a d_model representation for each material
+        # This is standard for text-based attention models for e.g. classification to create an embedding for the entire text
+        # But maybe room for improvement here?
         attention = tf.keras.layers.GlobalAveragePooling1D(data_format='channels_last')(attention)
 
-        attention = tf.keras.layers.Dense(units=d_model / 2, activation=None)(attention)
+        attention = tf.keras.layers.Dense(units=self.d_model / 2, activation=None)(attention)
         attention = tf.keras.layers.PReLU()(attention)
 
         model_mat2vec_hiddenrep = tf.keras.Model(inputs=input_matrices, outputs=attention)
         hidden_rep = model_mat2vec_hiddenrep(input_matrices)
-        sample_material_embedding = tf.keras.layers.Dense(units=embedding_dimension, activation=None)(hidden_rep)
+        sample_material_embedding = tf.keras.layers.Dense(units=self.embedding_dimension, activation=None)(hidden_rep)
         sample_material_embedding = tf.keras.layers.Lambda(lambda x: tf.expand_dims(x, axis=1))(sample_material_embedding)
 
         positive_probability_material = tf.keras.layers.Dot(axes=(2, 2))([sample_context_embedding, sample_material_embedding])
-        positive_loss_material_tensor = tf.keras.layers.Lambda(positive_loss)(positive_probability_material)
+        positive_loss_material_tensor = tf.keras.layers.Lambda(self._positive_loss)(positive_probability_material)
 
         loss_material = tf.keras.layers.Concatenate()([positive_loss_material_tensor, negative_loss_tensor])
         loss_material = tf.keras.layers.Lambda(lambda x: tf.keras.backend.squeeze(tf.keras.backend.sum(x, axis=2, keepdims=False), axis=1))(loss_material)
@@ -195,23 +130,39 @@ class Word2VecPretrainingModel:
         self.model_mat2vec_hiddenrep.summary()
 
     def train(self):
-        if not self.quiet:
-            print("generating pretraining datasets")
+        print("generating pretraining datasets") if not self.quiet else None
 
         corpus = []
+        processed_abstracts = load_file("processed_abstracts.txt", as_lines=True, quiet=self.quiet)
         for abstract in processed_abstracts:
             corpus.append(json.loads(abstract))
-        dataset = tf.data.Dataset.from_generator(lambda: example_generator_not_material(corpus, window_size, word2index), ((tf.int64, tf.int64), tf.int64), output_shapes=((tf.TensorShape([]), tf.TensorShape([])), tf.TensorShape([]))).prefetch(tf.data.experimental.AUTOTUNE).batch(512)
-        dataset_material = tf.data.Dataset.from_generator(lambda: example_generator_material(corpus, window_size, word2index, material2index), ((tf.float32, tf.int64), tf.int64), output_shapes=((tf.TensorShape([9, n_elements]), tf.TensorShape([])), tf.TensorShape([]))).batch(512).prefetch(tf.data.experimental.AUTOTUNE)
+
+        material2index = load_file('material2index.pkl', quiet=self.quiet)
+        n_elements = len(elements) + 1
+        dataset = tf.data.Dataset.from_generator(lambda: example_generator_not_material(corpus, self.window_size, self.word2index), ((tf.int64, tf.int64), tf.int64), output_shapes=((tf.TensorShape([]), tf.TensorShape([])), tf.TensorShape([]))).prefetch(tf.data.experimental.AUTOTUNE).batch(512)
+        dataset_material = tf.data.Dataset.from_generator(lambda: example_generator_material(corpus, self.window_size, self.word2index, material2index), ((tf.float32, tf.int64), tf.int64), output_shapes=((tf.TensorShape([9, n_elements]), tf.TensorShape([])), tf.TensorShape([]))).batch(512).prefetch(tf.data.experimental.AUTOTUNE)
 
         print("completed pretraining datasets\ntraining model...") if not self.quiet else None
 
-        n_training_cyles = 20
-        for i in range():
-            print(f"training cycle {i}/{n_training_cyles}") if not self.quiet else None
-            self.model_word2vec.fit(dataset, steps_per_epoch=1000, epochs=1)
-            self.model_mat2vec.fit(dataset_material, steps_per_epoch=1000, epochs=1)
-            # self.model_mat2vec_hiddenrep.save_weights("mat2vec_hiddenrep{}.keras".format(i))
+        # n_training_cyles = 20
+        # for i in range(n_training_cyles):
+        #     print(f"training cycle {i}/{n_training_cyles}") if not self.quiet else None
+        #     self.model_word2vec.fit(dataset, steps_per_epoch=1000, epochs=1)
+        #     self.model_mat2vec.fit(dataset_material, steps_per_epoch=1000, epochs=1)
+        #     # self.model_mat2vec_hiddenrep.save_weights("mat2vec_hiddenrep{}.keras".format(i))
+
+        logdir = "../logdir_pretraining/fit/"
+        tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=logdir)
+
+        early_stopping = tf.keras.callbacks.EarlyStopping(
+            monitor='loss', min_delta=0, patience=1,
+        )
+
+        print("training word2vec...") if not self.quiet else None
+        self.model_word2vec.fit(dataset, steps_per_epoch=1000, epochs=25, callbacks=[early_stopping, tensorboard_callback])
+        print("word2vec trained.\ntraining mat2vec...") if not self.quiet else None
+        self.model_mat2vec.fit(dataset_material, steps_per_epoch=500, epochs=15, callbacks=[early_stopping, tensorboard_callback])
+        print("mat2vec trained") if not self.quiet else None
 
     def save_weights(self):
         self.model_word2vec.save_weights(self.model_word2vec_weights_file)
@@ -224,11 +175,94 @@ class Word2VecPretrainingModel:
         self.model_mat2vec.load_weights(self.model_mat2vec_weights_file)
         print("model weights loaded") if not self.quiet else None
 
+    @staticmethod
+    def _negative_samples_contract(x):
+        return tf.einsum('ijk,lk->ijl', x[0], x[1])
+
+    @staticmethod
+    def _positive_loss(ypred):
+        return tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.ones_like(ypred), logits=ypred)
+
+    @staticmethod
+    def _negative_loss(ypred):
+        return tf.nn.sigmoid_cross_entropy_with_logits(labels=tf.zeros_like(ypred), logits=ypred)
+
+    @staticmethod
+    def _create_padding_mask(input_matrices):
+        mask = tf.reduce_sum(input_matrices, axis=-1, keepdims=False)
+        mask = tf.cast(tf.math.equal(mask, 0), dtype=tf.float32)
+        return mask[:, tf.newaxis, tf.newaxis, :]
+
+    @staticmethod
+    def _scaled_dot_product_attention(query, key, value, mask):
+        """Calculate the attention weights. """
+        matmul_qk = tf.matmul(query, key, transpose_b=True)
+
+        # scale matmul_qk
+        depth = tf.cast(tf.shape(key)[-1], tf.float32)
+        logits = matmul_qk / tf.math.sqrt(depth)
+
+        # add the mask to zero out padding tokens
+        if mask is not None:
+            logits += (mask * -1e9)
+
+        # softmax is normalized on the last axis (seq_len_k)
+        attention_weights = tf.nn.softmax(logits, axis=-1)
+
+        # attention_weights = tf.keras.layers.Dropout(rate=dropout)(attention_weights)
+        output = tf.matmul(attention_weights, value)
+        return output
+
+    def _attention_layer(self, d_model, n_heads, name="encoder_layer"):
+        inputs = tf.keras.layers.Input(shape=(self.max_len, d_model), name="inputs")
+
+        input_mask = tf.keras.layers.Input(shape=(1, 1, self.max_len,), name="mask")
+        inputs_norm = tf.keras.layers.LayerNormalization(epsilon=1e-6)(inputs)
+        batch_size = tf.shape(inputs)[0]
+
+        def split_heads(inputs, batch_size):
+            inputs = tf.reshape(
+                inputs, shape=(batch_size, -1, n_heads, d_model // n_heads))
+            return tf.transpose(inputs, perm=[0, 2, 1, 3])
+
+        query = tf.keras.layers.Dense(units=d_model)(inputs_norm)
+        # query = tf.keras.layers.PReLU()(query)
+        # query = tf.keras.layers.Dense(units=d_model)(query)
+
+        key = tf.keras.layers.Dense(units=d_model)(inputs_norm)
+        # key = tf.keras.layers.PReLU()(key)
+        # key = tf.keras.layers.Dense(units=d_model)(key)
+
+        value = tf.keras.layers.Dense(units=d_model)(inputs_norm)
+        # value = tf.keras.layers.PReLU()(value)
+        # value = tf.keras.layers.Dense(units=d_model)(value)
+
+        query = split_heads(query, batch_size)
+        key = split_heads(key, batch_size)
+        value = split_heads(value, batch_size)
+
+        scaled_attention = self._scaled_dot_product_attention(query, key, value, input_mask)
+        scaled_attention = tf.transpose(scaled_attention, perm=[0, 2, 1, 3])
+
+        # concatenation of heads
+        concat_attention = tf.reshape(scaled_attention,
+                                      (batch_size, -1, d_model))
+
+        attention = tf.keras.layers.Dense(units=d_model)(concat_attention)
+        attention = tf.keras.layers.LayerNormalization(epsilon=1e-6)(
+            inputs_norm + attention)
+        outputs = tf.keras.layers.PReLU()(attention)
+
+        return tf.keras.Model(inputs=[inputs, input_mask], outputs=outputs,
+                              name=name)
+
 
 if __name__ == "__main__":
-    w2v = Word2VecPretrainingModel()
+    w2v = Word2VecPretrainingModel(name="refactor_dense", n_layers=2)
     w2v.compile()
-    w2v.load_weights()
+    # w2v.load_weights()
+    w2v.train()
+    w2v.save_weights()
 
 
 

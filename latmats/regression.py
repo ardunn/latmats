@@ -16,10 +16,7 @@ from latmats.tasks.loader import load_e_form, load_bandgaps
 
 
 
-# # Output of attention layers is d_model * n_elements
-# # Average over elements to get a d_model representation for each material
-# # This is standard for text-based attention models for e.g. classification to create an embedding for the entire text
-# # But maybe room for improvement here?
+
 # attention = tf.keras.layers.GlobalAveragePooling1D(data_format='channels_last')(attention)
 #
 # # A couple of fully connected layers to transform to output dimension
@@ -199,7 +196,7 @@ for train_indices, test_indices in kf.split(labels):
     # model_hidden_rep.load_weights("hidden_rep0.keras")
 
     # Define the Keras TensorBoard callback.
-    logdir = "mylogdir/fit/"
+    logdir = "logdir_regression/fit/"
     tensorboard_callback = keras.callbacks.TensorBoard(log_dir=logdir)
 
     regression_model.fit(features_train, targets_train,

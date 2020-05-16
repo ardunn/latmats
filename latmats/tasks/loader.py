@@ -65,7 +65,7 @@ def load_e_form():
     return df
 
 
-def load_bandgaps():
+def load_expt_gaps():
     """
     4,604 experimental band gaps, one per composition.
 
