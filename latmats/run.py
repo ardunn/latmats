@@ -44,8 +44,8 @@ if __name__ == "__main__":
 
     ab = AlgorithmBenchmark(regression)
 
-    # problem = "expt_gaps"
-    problem = "e_form"
+    problem = "zT"
+    # problem = "e_form"
 
     gap_scores = ab.test(problem)
 
