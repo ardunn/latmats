@@ -16,7 +16,7 @@ class AlgorithmBenchmark:
         config = {}
         self.estimator = estimator
 
-        for problem in ["zT", "steels", "expt_gap", "e_form"]:
+        for problem in ["zT", "steels", "expt_gaps", "e_form"]:
 
             if problem == "zT":
                 df = load_zT(all_data=False)
@@ -138,10 +138,15 @@ class AlgorithmBenchmark:
         target = self._get_target_from_df(df_train)
         target_predicted = f"predicted {target}"
 
-        x_train = df_train.drop(labels=[target], axis=1)
-        y_train = df_train[target]
-        x_test = df_test.drop(labels=[target], axis=1)
-        y_test = df_test[target]
+
+        # df_train.rename(columns={target: "target", "composition": "formula"}).to_csv(f"{problem}_train.csv", index=False)
+        # df_test.rename(columns={target: "target", "composition": "formula"}).to_csv(f"{problem}_test.csv", index=False)
+
+
+        x_train = df_train["composition"].tolist()
+        y_train = df_train[target].tolist()
+        x_test = df_test["composition"].tolist()
+        y_test = df_test[target].tolist()
 
         self.estimator.fit(x_train, y_train)
         y_pred = self.estimator.predict(x_test)
@@ -196,12 +201,14 @@ def rmse(y_true, y_pred):
 
 
 if __name__ == "__main__":
-    from latmats.tasks.baselines import DummyEstimator
-    dummy_benchmark = AlgorithmBenchmark(DummyEstimator())
-    dummy_benchmark.cross_validate_all_problems()
-    dummy_benchmark.test_all_problems()
-    dummy_benchmark.export_results()
+    from latmats.tasks.baselines import DummyEstimator, RFEstimator
+    # dummy_benchmark = AlgorithmBenchmark(DummyEstimator())
+    # dummy_benchmark.cross_validate_all_problems()
+    # dummy_benchmark.test("expt_gaps")
+    # dummy_benchmark.test_all_problems()
+    # dummy_benchmark.export_results()
 
-    # dummy_benchmark = AlgorithmBenchmark(RFEstimator())
+    dummy_benchmark = AlgorithmBenchmark(RFEstimator(pbar=True))
     # dummy_benchmark.cross_validate_all_problems(quiet=False)
+    dummy_benchmark.test_all_problems()
 

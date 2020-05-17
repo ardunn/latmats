@@ -1,6 +1,7 @@
 from abc import abstractmethod
 from typing import Iterable
 
+import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.dummy import DummyRegressor
 from matminer.featurizers.conversions import StrToComposition
@@ -59,7 +60,7 @@ class DummyEstimator(BaseTesterEstimator):
 class RFEstimator(BaseTesterEstimator):
 
     def __init__(self, pbar=False):
-        self.regressor = RandomForestRegressor(n_estimators=1000)
+        self.regressor = RandomForestRegressor(n_estimators=500, n_jobs=-1, verbose=3)
         self.stc = StrToComposition()
         ep = ElementProperty.from_preset("magpie")
         ef = ElementFraction()

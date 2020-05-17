@@ -1,13 +1,10 @@
-from __future__ import absolute_import, division, print_function, unicode_literals
-import math
 from typing import Iterable
+
+import numpy as np
 import tensorflow as tf
 from tensorflow import keras
-import json
-import numpy as np
-from sklearn.model_selection import KFold
-from sklearn.utils import shuffle
 import tensorflow_addons as tfa
+from sklearn.utils import shuffle
 from sklearn.preprocessing import StandardScaler
 
 from latmats.utils import parse_formula, elements
@@ -40,16 +37,18 @@ class RegressionModel(BaseTesterEstimator):
         # Define the Keras TensorBoard callback.
         logdir = "logdir_regression/fit/"
         tensorboard_callback = keras.callbacks.TensorBoard(log_dir=logdir)
-        early_stopping_callback = keras.callbacks.EarlyStopping(monitor="val_loss", patience=2)
-        self.regression_model.fit(features, targets, validation_split=0.20, epochs=10000, callbacks=[tensorboard_callback, early_stopping_callback], batch_size=128)
+        early_stopping_callback = keras.callbacks.EarlyStopping(monitor="val_loss", patience=20)
+        callbacks = [
+            tensorboard_callback,
+            early_stopping_callback
+        ]
+        self.regression_model.fit(features, targets, validation_split=0.2, epochs=1000, callbacks=callbacks, batch_size=128)
         self._qprint("regression model fit")
 
     def predict(self, x: Iterable[str]) -> Iterable:
         features = self._convert_formulas_to_matrices(x)
-        y_pred = self.regression_model.predict(features)
-        print("y_pred", y_pred.shape, type(y_pred))
-
-        y_pred_rescaled = self.scaler.transform(y_pred.reshape((-1, 1))).reshape((-1))
+        y_pred = self.regression_model.predict(features)[:, 0]
+        y_pred_rescaled = self.scaler.inverse_transform(y_pred)
         return y_pred_rescaled
 
     def save_weights(self):
@@ -82,9 +81,15 @@ class RegressionModel(BaseTesterEstimator):
         # Interpret first value as prediction for quantity (ie Ef)
         # And second as an estimate of uncertainty
         # Allows the model to indicate levels of certainty
-        output = tf.keras.layers.Dense(units=2)(self.pretraining_model.model_mat2vec_hiddenrep(input_matrices))
+        # output = tf.keras.layers.Dense(units=2)(self.pretraining_model.model_mat2vec_hiddenrep(input_matrices))
+
+        intermediate = self.pretraining_model.model_mat2vec_hiddenrep(input_matrices)
+        # intermediate = tf.keras.layers.Dense(units=self.pretraining_model.d_model/4, activation="relu")(intermediate)
+        intermediate = tf.keras.layers.Dense(units=8, activation="relu")(intermediate)
+
+        output = tf.keras.layers.Dense(units=2)(intermediate)
         regression_model = tf.keras.Model(inputs=input_matrices, outputs=output)
-        optimizer = tfa.optimizers.AdamW(learning_rate=1e-4, weight_decay=1e-7)
+        optimizer = tfa.optimizers.AdamW(learning_rate=1e-4, weight_decay=1e-6)
         regression_model.compile(optimizer=optimizer, loss=self._robust_l1, metrics=[self._unnormalized_mae])
         self.regression_model = regression_model
         self._qprint("regression model compiled")
