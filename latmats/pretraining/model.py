@@ -167,9 +167,11 @@ class Word2VecPretrainingModel:
             self.model_word2vec.fit(dataset, steps_per_epoch=1000, epochs=25, callbacks=[early_stopping, tensorboard_callback])
             self._qprint("word2vec trained.")
 
+        for layer in self.model_word2vec.layers:
+            layer.trainable = False
 
         self._qprint("training mat2vec...")
-        self.model_mat2vec.fit(dataset_material, steps_per_epoch=500, epochs=15, callbacks=[early_stopping, tensorboard_callback])
+        self.model_mat2vec.fit(dataset_material, steps_per_epoch=500, epochs=20, callbacks=[early_stopping, tensorboard_callback])
         self._qprint("mat2vec trained")
 
     def save_weights(self):
@@ -265,23 +267,6 @@ class Word2VecPretrainingModel:
 
     def _qprint(self, str):
         print(str) if not self.quiet else None
-
-
-
-
-
-if __name__ == "__main__":
-    # w2v = Word2VecPretrainingModel(name="refactor_dense", n_layers=2)
-    # w2v.compile()
-    # w2v.load_weights()
-    # w2v.train()
-    # w2v.save_weights()
-
-
-    w2v_attention = Word2VecPretrainingModel(name="attention2by8", use_attention=True, n_layers=2, n_heads=8)
-    w2v_attention.compile()
-    w2v_attention.train(only_mat2vec=True)
-    w2v_attention.save_weights()
 
 
 

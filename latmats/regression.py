@@ -6,22 +6,14 @@ from tensorflow import keras
 import json
 import numpy as np
 from sklearn.model_selection import KFold
-from latmats.originals.keras_utils import parse_formula, elements
 from sklearn.utils import shuffle
 import tensorflow_addons as tfa
 from sklearn.preprocessing import StandardScaler
 
-
+from latmats.utils import parse_formula, elements
 from latmats.pretraining.model import Word2VecPretrainingModel
-from latmats.tasks.loader import load_e_form, load_expt_gaps
 from latmats.tasks.baselines import BaseTesterEstimator
 
-
-w2vpm = Word2VecPretrainingModel(name="refactor_dense", n_layers=2)
-w2vpm.compile()
-w2vpm.load_weights()
-model_hidden_rep = w2vpm.
-w2vpm.summarize()
 
 class RegressionModel(BaseTesterEstimator):
 
@@ -35,35 +27,22 @@ class RegressionModel(BaseTesterEstimator):
         self.regression_model = None
         self.regression_model_file = f"regression_model_{name}"
 
-    def compile(self):
-        # Input for one material is a matrix of size max_material_length x n_elements + 1
-        # Each embeds ONE component element's absolute count, final column is fraction of total
-        # Pad with 0s to reach max_length
-        max_len = self.pretraining_model.max_len
-        input_matrices = tf.keras.layers.Input(shape=(max_len, len(elements) + 1))
-
-        # Output is dimension 2 because we're using fancy robust losses
-        # Interpret first value as prediction for quantity (ie Ef)
-        # And second as an estimate of uncertainty
-        # Allows the model to indicate levels of certainty
-        output = tf.keras.layers.Dense(units=2)(self.pretraining_model.model_mat2vec_hiddenrep(input_matrices))
-        regression_model = tf.keras.Model(inputs=input_matrices, outputs=output)
-        optimizer = tfa.optimizers.AdamW(learning_rate=1e-4, weight_decay=1e-7)
-        regression_model.compile(optimizer=optimizer, loss=self._RobustL1, metrics=[self._unnormalized_mae])
-        self.regression_model = regression_model
-
     def fit(self, x: Iterable[str], y) -> None:
+        self._qprint("fitting regression model")
         features = self._convert_formulas_to_matrices(x)
-        features = np.asarray(features)
         targets = np.asarray(y)
-        normalizer = self.scaler.fit(targets.reshape((-1, 1)))
-        targets = normalizer.transform(targets.reshape((-1, 1))).reshape((-1))
+        self.scaler.fit(targets.reshape((-1, 1)))
+        targets = self.scaler.transform(targets.reshape((-1, 1))).reshape((-1))
         targets, features = shuffle(targets, features)
+
+        self._compile()
 
         # Define the Keras TensorBoard callback.
         logdir = "logdir_regression/fit/"
         tensorboard_callback = keras.callbacks.TensorBoard(log_dir=logdir)
-        self.regression_model.fit(features, targets, validation_split=0.20, epochs=10000, callbacks=[tensorboard_callback], batch_size=128)
+        early_stopping_callback = keras.callbacks.EarlyStopping(monitor="val_loss", patience=2)
+        self.regression_model.fit(features, targets, validation_split=0.20, epochs=10000, callbacks=[tensorboard_callback, early_stopping_callback], batch_size=128)
+        self._qprint("regression model fit")
 
     def predict(self, x: Iterable[str]) -> Iterable:
         features = self._convert_formulas_to_matrices(x)
@@ -74,17 +53,41 @@ class RegressionModel(BaseTesterEstimator):
         return y_pred_rescaled
 
     def save_weights(self):
+        self._qprint(f"saving regression model weights to {self.regression_model_file}")
         self.regression_model.save_weights(self.regression_model_file)
+        self._qprint("regression model weights saved")
 
     def load_weights(self):
+        self._qprint(f"loading regression model weights from {self.regression_model_file}")
         self.regression_model.load_weights(self.regression_model_file)
+        self._qprint("loaded regression model weights")
 
     @staticmethod
     def _convert_formulas_to_matrices(x):
         features = []
         for xi in x:
             features.append(parse_formula(xi))
+        features = np.asarray(features)
         return features
+
+    def _compile(self):
+        self._qprint("compiling regression model")
+        # Input for one material is a matrix of size max_material_length x n_elements + 1
+        # Each embeds ONE component element's absolute count, final column is fraction of total
+        # Pad with 0s to reach max_length
+        max_len = self.pretraining_model.max_len
+        input_matrices = tf.keras.layers.Input(shape=(max_len, len(elements)))
+
+        # Output is dimension 2 because we're using fancy robust losses
+        # Interpret first value as prediction for quantity (ie Ef)
+        # And second as an estimate of uncertainty
+        # Allows the model to indicate levels of certainty
+        output = tf.keras.layers.Dense(units=2)(self.pretraining_model.model_mat2vec_hiddenrep(input_matrices))
+        regression_model = tf.keras.Model(inputs=input_matrices, outputs=output)
+        optimizer = tfa.optimizers.AdamW(learning_rate=1e-4, weight_decay=1e-7)
+        regression_model.compile(optimizer=optimizer, loss=self._robust_l1, metrics=[self._unnormalized_mae])
+        self.regression_model = regression_model
+        self._qprint("regression model compiled")
 
     def _unnormalized_mae(self, y_true, y_pred):
         # Define a function that gives us the MAE of unnormalized predictions to monitor during training
@@ -96,7 +99,7 @@ class RegressionModel(BaseTesterEstimator):
 
         return tf.reduce_mean(mae)
 
-    def _RobustL1(self, x_true, x_pred):
+    def _robust_l1(self, x_true, x_pred):
         """
         Robust L1 loss using a lorentzian prior. Allows for estimation
         of an aleatoric uncertainty.
@@ -112,7 +115,7 @@ class RegressionModel(BaseTesterEstimator):
         loss = np.sqrt(2.0) * tf.abs(output - target) * tf.exp(-std) + std
         return tf.reduce_mean(loss)
 
-    def _RobustL2(self, x_true, x_pred):
+    def _robust_l2(self, x_true, x_pred):
         """
         Robust L2 loss using a gaussian prior. Allows for estimation
         of an aleatoric uncertainty.
