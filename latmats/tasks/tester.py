@@ -128,7 +128,7 @@ class AlgorithmBenchmark:
                 print(f"'{problem}' {metric}: {score}")
         return scores
 
-    def test(self, problem, quiet=False):
+    def test(self, problem, quiet=False, n_train_samples=None):
         desc = f"testing {self.estimator.__class__.__name__} on problem: '{problem}'"
         if not quiet:
             print(f"started: {desc}")
@@ -137,6 +137,10 @@ class AlgorithmBenchmark:
         df_test = self.data[problem]["testing"]["df_test"]
         target = self._get_target_from_df(df_train)
         target_predicted = f"predicted {target}"
+
+        if n_train_samples:
+            print(f"drawing {n_train_samples} from training for training")
+            df_train = df_train.sample(n=n_train_samples)
 
 
         # df_train.rename(columns={target: "target", "composition": "formula"}).to_csv(f"{problem}_train.csv", index=False)

@@ -40,7 +40,7 @@ class RegressionModel(BaseTesterEstimator):
         early_stopping_callback = keras.callbacks.EarlyStopping(monitor="val_loss", patience=20)
         callbacks = [
             tensorboard_callback,
-            # early_stopping_callback
+            early_stopping_callback
         ]
         self.regression_model.fit(features, targets, validation_split=0.2, epochs=1000, callbacks=callbacks, batch_size=128)
         self._qprint("regression model fit")
@@ -89,8 +89,8 @@ class RegressionModel(BaseTesterEstimator):
 
         output = tf.keras.layers.Dense(units=2)(intermediate)
         regression_model = tf.keras.Model(inputs=input_matrices, outputs=output)
-        # optimizer = tfa.optimizers.AdamW(learning_rate=1e-5, weight_decay=1e-7) # best e_form
-        optimizer = tfa.optimizers.AdamW(learning_rate=1e-4, weight_decay=1e-6) # best e_form
+        optimizer = tfa.optimizers.AdamW(learning_rate=1e-5, weight_decay=1e-7) # best e_form
+        # optimizer = tfa.optimizers.AdamW(learning_rate=1e-4, weight_decay=1e-6) # band gap
 
         regression_model.compile(optimizer=optimizer, loss=self._robust_l1, metrics=[self._unnormalized_mae])
         self.regression_model = regression_model

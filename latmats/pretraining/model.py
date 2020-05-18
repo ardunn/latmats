@@ -144,11 +144,13 @@ class Word2VecPretrainingModel:
 
         self._qprint("completed pretraining datasets\ntraining model...")
 
-        n_training_cycles = 30
-        for i in range(n_training_cycles):
-            self._qprint(f"training cycle {i}/{n_training_cycles}")
-            self.model_word2vec.fit(dataset, steps_per_epoch=1000, epochs=1)
-            self.model_mat2vec.fit(dataset_material, steps_per_epoch=1000, epochs=1)
+
+        # cyclical training can work better
+        # n_training_cycles = 30
+        # for i in range(n_training_cycles):
+        #     self._qprint(f"training cycle {i}/{n_training_cycles}")
+        #     self.model_word2vec.fit(dataset, steps_per_epoch=1000, epochs=1)
+        #     self.model_mat2vec.fit(dataset_material, steps_per_epoch=1000, epochs=1)
 
         logdir = "../logdir_pretraining/fit/"
         tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=logdir)
@@ -157,14 +159,14 @@ class Word2VecPretrainingModel:
             monitor='loss', min_delta=0, patience=1,
         )
 
-        # if only_mat2vec:
-        #     self._qprint(f"reloading previously trained word2vec weights at {self.model_word2vec_weights_file}...")
-        #     self.model_word2vec.load_weights(self.model_word2vec_weights_file)
-        #     self._qprint("loaded previously trained word2vec weights.")
-        # else:
-        #     self._qprint("training word2vec...")
-        #     self.model_word2vec.fit(dataset, steps_per_epoch=1000, epochs=25, callbacks=[early_stopping, tensorboard_callback])
-        #     self._qprint("word2vec trained.")
+        if only_mat2vec:
+            self._qprint(f"reloading previously trained word2vec weights at {self.model_word2vec_weights_file}...")
+            self.model_word2vec.load_weights(self.model_word2vec_weights_file)
+            self._qprint("loaded previously trained word2vec weights.")
+        else:
+            self._qprint("training word2vec...")
+            self.model_word2vec.fit(dataset, steps_per_epoch=1000, epochs=25, callbacks=[early_stopping, tensorboard_callback])
+            self._qprint("word2vec trained.")
 
         for layer in self.model_word2vec.layers:
             layer.trainable = False
