@@ -1,6 +1,8 @@
 import os
 import pickle
+import json
 
+import tqdm
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data/")
 
@@ -20,14 +22,13 @@ def open_pickle(filename):
     return loaded
 
 
-def load_file(relative_filename: str, as_lines=False, quiet: bool = False):
+def load_file(relative_filename: str, jsonify: bool =True, quiet: bool = False, limit: int = None):
     """
     Load a file by relative filename (e.g., material2index).
 
     Args:
         relative_filename (str): The relative filename
-        as_lines (bool): Get a text file as lines, not as one big string. Only
-            valid for .txt files.
+        jsonify (bool): Interpret text file lines as json (required for processed_abstracts)
         quiet (bool): Print when starting and done loading the file.
 
     Returns:
@@ -40,10 +41,16 @@ def load_file(relative_filename: str, as_lines=False, quiet: bool = False):
         print(f"loading {filename}...")
     if filename.endswith(".txt"):
         with open(filename) as f:
-            if as_lines:
-                loaded = f.readlines()
+            if jsonify:
+                lines = f.readlines()
+                loaded = []
+
+                lines_limited = lines[:limit] if limit else lines
+                for l in tqdm.tqdm(lines_limited):
+                    loaded.append(json.loads(l))
             else:
                 loaded = f.read()
+
     elif filename.endswith(".pkl"):
         loaded = open_pickle(filename)
     if not quiet:

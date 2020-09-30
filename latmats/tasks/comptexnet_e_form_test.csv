@@ -1,4 +1,4 @@
-mpid,e_form (eV/atom),composition,predicted e_form (eV/atom)
+eepmpid,e_form (eV/atom),composition,predicted e_form (eV/atom)
 mp-20645,-0.8177578444444448,Ru1Si1Tb1,-0.8187962
 mp-570553,-0.3698583892142857,Fe1P4,-0.35742295
 mp-8000,-2.8490718305833327,B2O6Sn1Sr1,-2.7670698
