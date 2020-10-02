@@ -132,10 +132,10 @@ class Word2VecPretrainingModel:
     def train(self, only_mat2vec=False):
         self._qprint("generating pretraining datasets...")
 
-        corpus = []
-        processed_abstracts = load_file("processed_abstracts.txt", as_lines=True, quiet=self.quiet)
-        for abstract in processed_abstracts:
-            corpus.append(json.loads(abstract))
+        # corpus = []
+        corpus = load_file("processed_abstracts.txt", quiet=self.quiet)
+        # for abstract in processed_abstracts:
+        #     corpus.append(json.loads(abstract))
 
         material2index = load_file('material2index.pkl', quiet=self.quiet)
         n_elements = len(elements)

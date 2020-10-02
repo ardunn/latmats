@@ -1,4 +1,5 @@
 import pprint
+import os
 import json
 
 import tqdm
@@ -7,10 +8,11 @@ from mat2vec.processing import MaterialsTextProcessor
 
 from latmats.pretraining.data_loader import load_file
 
+PARENT_DIR = os.path.dirname(os.path.abspath(__file__))
+TRAINING_CORPUS = os.path.join(PARENT_DIR, "processed_abstracts_excluding_analogies.json")
+TEST_ANALOGIES = os.path.join(PARENT_DIR, "analogies_hiddenrep_test.txt")
 
-TRAINING_CORPUS = "processed_abstracts_excluding_analogies.json"
-
-def load_analogies(filename, quiet=True):
+def load_analogies(filename=TEST_ANALOGIES, quiet=True):
     """
     Rules:
     1. Only keep analogy sections relevant to compounds
@@ -61,7 +63,8 @@ def load_analogies(filename, quiet=True):
         ": crystal structures (zincblende, wurtzite, rutile, rocksalt, etc.)": "compounds_structures",
         ": crystal symmetry (cubic, hexagonal, tetragonal, etc.)": "compounds_symmetry",
         ": magnetic properties": "compounds_magnetic",
-        ": metals and their oxides (most common)": "oxides"
+        ": metals and their oxides (most common)": "oxides",
+        ": chemical element names": "element_names"
     }
     analogies_by_this_section = []
     for a in analogy_list:
@@ -97,9 +100,9 @@ def load_analogies(filename, quiet=True):
                 except CompositionError:
                     pass
 
-            if not all([len(s.elements) == 1 for s in species]) and species and \
-                    not any([s.reduced_formula in missing_compositions for s in species]):
-
+            # if not all([len(s.elements) == 1 for s in species]) and species and \
+            #         not any([s.reduced_formula in missing_compositions for s in species]):
+            if species and not any([s.reduced_formula in missing_compositions for s in species]):
                 analogies[alabel].append(analogy_set)
                 for s in species:
                     if len(s.elements) > 1:
@@ -150,7 +153,7 @@ def load_training_corpus():
 
 
 if __name__ == "__main__":
-    analogies, compound_list = load_analogies("analogies_hiddenrep_test.txt", quiet=False)
+    analogies, compound_list = load_analogies(quiet=False)
 
     # pprint.pprint(compound_list)
     create_training_corpus(compound_list)
